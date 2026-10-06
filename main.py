@@ -4,6 +4,7 @@ Usage:
     python main.py                         Menu (Start, Settings, Statistics, Exit)
     python main.py --start                 Start monitoring straight away
     python main.py --start --source video.mp4
+    python main.py --start --record        Start monitoring and record the view to recordings/
     python main.py --image photo.jpg       Analyse a single image
 """
 
@@ -192,6 +193,7 @@ def main() -> int:
     parser.add_argument("--source", help="Webcam number, video file or rtsp:// URL (overrides config)")
     parser.add_argument("--model", help="Helmet model path (overrides config)")
     parser.add_argument("--start", action="store_true", help="Start monitoring without the menu")
+    parser.add_argument("--record", action="store_true", help="Record the monitoring view to MP4 (overrides config)")
     parser.add_argument("--image", help="Analyse one image and save the result")
     parser.add_argument("--output", help="Where to save the analysed image")
     parser.add_argument("--no-show", action="store_true", help="With --image: save the result without opening a window")
@@ -207,6 +209,8 @@ def main() -> int:
         config.source = args.source
     if args.model:
         config.helmet_model = args.model
+    if args.record:
+        config.recording_enabled = True
 
     print(DISCLAIMER)
 

@@ -10,6 +10,7 @@ logs/*
 !logs/.gitkeep
 snapshots/*
 !snapshots/.gitkeep
+recordings/
 runs/
 datasets/images/
 datasets/labels/

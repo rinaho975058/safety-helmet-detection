@@ -12,10 +12,12 @@ from src.config import Config
 from src.detector import Detector, ModelLoadError
 from src.event_logger import EventLogger
 from src.pipeline import SafetyPipeline
+from src.recorder import VideoRecorder
 from src.renderer import Overlay, render
 
 WINDOW_NAME = "Safety Helmet Detection"
 MAX_CONSECUTIVE_ERRORS = 30
+FPS_WARMUP_FRAMES = 10  # Live sources: measure speed this long before a recording starts
 
 
 def run_monitoring(config: Config) -> dict | None:
@@ -44,7 +46,11 @@ def run_monitoring(config: Config) -> dict | None:
         print(f"\n[error] {error}\n")
         return None
 
-    print(f"Monitoring {describe_source(config.source)}. Press Q in the video window to stop.")
+    recorder = VideoRecorder(config.recording_dir, config.camera_id, config.recording_retention_days)
+    want_recording = config.recording_enabled
+
+    print(f"Monitoring {describe_source(config.source)}. Press Q in the video window to stop, "
+          f"V to start/stop recording.")
     logger.log("SESSION_START", status=describe_source(config.source))
 
     cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
@@ -53,6 +59,8 @@ def run_monitoring(config: Config) -> dict | None:
     frame = None
     result = None
     errors = 0
+    processed = 0
+    fresh = False
     fps = 0.0
     last_time = time.perf_counter()
     messages = list(detector.warnings)
@@ -74,6 +82,8 @@ def run_monitoring(config: Config) -> dict | None:
                 try:
                     result = pipeline.process(frame)
                     errors = 0
+                    processed += 1
+                    fresh = True
                 except Exception as error:  # noqa: BLE001 - one bad frame must not stop monitoring
                     errors += 1
                     print(f"[warning] Skipped a frame: {error}")
@@ -102,9 +112,33 @@ def run_monitoring(config: Config) -> dict | None:
                     alerts_enabled=pipeline.alerts.enabled,
                     snapshots_enabled=logger.snapshots_enabled,
                     alert_flash=pipeline.alerts.recently_alerted(),
+                    recording=recorder.recording,
                     messages=messages,
                 )
-                cv2.imshow(WINDOW_NAME, render(frame, overlay, config.display_width))
+                view = render(frame, overlay, config.display_width)
+                cv2.imshow(WINDOW_NAME, view)
+
+                if fresh:
+                    fresh = False
+                    if want_recording and not recorder.recording:
+                        # Files are written frame by frame, so they keep their own speed; live
+                        # sources are written as fast as they are processed.
+                        if not video.is_live:
+                            record_fps = video.fps
+                        elif processed >= FPS_WARMUP_FRAMES:
+                            record_fps = fps
+                        else:
+                            record_fps = None
+                        if record_fps is not None:
+                            try:
+                                path = recorder.start(view, record_fps)
+                                print(f"Recording to {path}")
+                                logger.log("RECORDING_START", snapshot=str(path))
+                            except OSError as error:
+                                print(f"[error] {error}")
+                                messages.append(str(error))
+                                want_recording = False
+                    recorder.write(view)
 
             key = cv2.waitKey(1 if not paused else 50) & 0xFF
 
@@ -128,13 +162,27 @@ def run_monitoring(config: Config) -> dict | None:
             elif key in (ord("r"), ord("R")):
                 pipeline.reset()
                 print("Statistics reset.")
+            elif key in (ord("v"), ord("V")):
+                want_recording = not want_recording
+                if want_recording:
+                    print("Recording will start with the next frame.")
+                else:
+                    _stop_recording(recorder, logger)
     finally:
+        _stop_recording(recorder, logger)
         video.release()
         cv2.destroyAllWindows()
 
     summary = pipeline.statistics.summary()
     logger.log("SESSION_END", status=str(summary))
     return summary
+
+
+def _stop_recording(recorder: VideoRecorder, logger: EventLogger) -> None:
+    path = recorder.stop()
+    if path:
+        print(f"Recording saved: {path}")
+        logger.log("RECORDING_STOP", snapshot=str(path))
 
 
 def analyze_image(config: Config, image_path: str, output_path: str | None = None,

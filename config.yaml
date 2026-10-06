@@ -51,5 +51,11 @@ snapshots_enabled: false     # Saves a frame when a violation alert fires
 snapshot_dir: snapshots
 snapshot_retention_days: 7
 
+# ---------- Video recording ----------
+# Saves the monitoring view (with boxes) to MP4. Press V in the video window to start/stop.
+recording_enabled: false     # true = start recording as soon as monitoring starts
+recording_dir: recordings
+recording_retention_days: 7
+
 # ---------- Display ----------
 display_width: 1280

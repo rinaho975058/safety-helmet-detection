@@ -52,6 +52,7 @@ The person model (`yolo11n.pt`) downloads automatically the first time.
 |---|---|
 | `Space` | Pause / resume |
 | `S` | Save a snapshot |
+| `V` | Start / stop recording video to `recordings/` |
 | `A` | Turn alerts on / off |
 | `R` | Reset statistics |
 | `Q` / `Esc` | Stop (the session summary is printed) |
@@ -76,6 +77,7 @@ All settings are in [`config.yaml`](config.yaml). Change them there, or use **Se
 | `alerts_enabled`, `alert_sound`, `alert_stable_frames`, `alert_cooldown_seconds` | Alert behaviour |
 | `logging_enabled`, `log_retention_days` | Event log in `logs/` |
 | `snapshots_enabled`, `snapshot_retention_days` | Save a frame on each alert to `snapshots/` (off by default) |
+| `recording_enabled`, `recording_dir`, `recording_retention_days` | Record the monitoring view to MP4 in `recordings/` (off by default; `V` key or `--record` to start) |
 | `derive_no_helmet` | Alternative design: a person with no helmet evidence counts as No Helmet |
 | `display_width` | Window resolution |
 
@@ -130,9 +132,10 @@ flowchart TD
 
 - Video is processed locally, and nothing is uploaded.
 - No faces or names are identified. People only get temporary numbers (`#3`) that reset every session.
-- Continuous video is never recorded. The event log (`logs/events_YYYY-MM-DD.csv`) stores only: time, event type, temporary person number, status, confidence and camera name.
+- Video is only recorded when you ask for it (`V` key, `--record`, or `recording_enabled: true`). While recording, the screen shows `REC`, and MP4 files with the boxes and labels are saved to `recordings/`. Recordings show people's faces, so restrict access to that folder.
+- The event log (`logs/events_YYYY-MM-DD.csv`) stores only: time, event type, temporary person number, status, confidence and camera name.
 - Snapshots are **off by default**. When on, the screen shows `SNAPSHOTS ON`, and full frames are saved to `snapshots/`. These frames can show people's faces, so restrict access to that folder.
-- Old logs and snapshots are deleted automatically after `log_retention_days` and `snapshot_retention_days`.
+- Old logs, snapshots and recordings are deleted automatically after `log_retention_days`, `snapshot_retention_days` and `recording_retention_days`.
 
 ## 6. Tests
 

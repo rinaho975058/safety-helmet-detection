@@ -42,6 +42,7 @@ class Overlay:
     paused: bool = False
     alerts_enabled: bool = True
     snapshots_enabled: bool = False
+    recording: bool = False
     alert_flash: bool = False
     messages: list[str] = field(default_factory=list)
 
@@ -107,6 +108,8 @@ def render(frame: np.ndarray, overlay: Overlay, display_width: int = 1280) -> np
         flags.append("ALERTS OFF")
     if overlay.snapshots_enabled:
         flags.append("SNAPSHOTS ON")
+    if overlay.recording:
+        flags.append("REC")
     if overlay.fps > 0:
         flags.append(f"{overlay.fps:.1f} FPS")
     flag_text = "  |  ".join(flags)
@@ -143,7 +146,7 @@ def render(frame: np.ndarray, overlay: Overlay, display_width: int = 1280) -> np
         y -= 26
 
     # Controls.
-    controls = "[Space] Pause   [S] Snapshot   [A] Alerts on/off   [R] Reset stats   [Q] Stop"
+    controls = "[Space] Pause   [S] Snapshot   [A] Alerts on/off   [R] Reset stats   [V] Record   [Q] Stop"
     _panel(image, (0, height - 30), (width, 30), 0.7)
     cv2.putText(image, controls, (12, height - 10), FONT, 0.5, WHITE, 1, cv2.LINE_AA)
 

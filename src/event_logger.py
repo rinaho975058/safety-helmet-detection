@@ -1,7 +1,7 @@
 """Event logger: violation events to daily CSV files, plus optional snapshots.
 
 Privacy: only time, event type, anonymous track number, confidence and camera name are stored.
-No names, faces or continuous video are saved.
+No names or faces are saved here; optional video recording is handled by src/recorder.py.
 """
 
 from __future__ import annotations

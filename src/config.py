@@ -59,6 +59,11 @@ class Config:
     snapshot_dir: str = "snapshots"
     snapshot_retention_days: int = 7
 
+    # Video recording
+    recording_enabled: bool = False
+    recording_dir: str = "recordings"
+    recording_retention_days: int = 7
+
     # Display
     display_width: int = 1280
 
@@ -77,7 +82,8 @@ class Config:
                 problems.append(f"{name} must be at least 1.")
 
         for name in ("max_missed_frames", "reconnect_attempts", "log_retention_days",
-                     "snapshot_retention_days", "alert_cooldown_seconds", "association_margin"):
+                     "snapshot_retention_days", "recording_retention_days", "alert_cooldown_seconds",
+                     "association_margin"):
             if getattr(self, name) < 0:
                 problems.append(f"{name} cannot be negative.")
 
