@@ -34,6 +34,12 @@ Built with **Python + OpenCV + YOLO (Ultralytics)**.
 
    or train your own (see section 7). Without a helmet model, the app still runs, but it only finds people and shows every status as Unknown.
 
+5. **Check that everything works:** `pytest` should report all tests passed, and `python main.py --start --source samples/demo.mp4` should play the demo video with boxes.
+
+**Setup problems**
+- *PowerShell says running scripts is disabled* when you activate: run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once, or skip activating and use `.venv\Scripts\python.exe` in place of `python`.
+- *pip fails with a "Long Path" hint*: clone the project into a short folder (for example `C:\projects\helmet`), or enable long paths in Windows.
+
 ## 2. Running
 
 ```bash
