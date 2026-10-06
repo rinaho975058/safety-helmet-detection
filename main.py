@@ -12,15 +12,18 @@ from __future__ import annotations
 import argparse
 import sys
 from collections import Counter
-from dataclasses import fields
+from dataclasses import fields, replace
+from pathlib import Path
 
-from src.camera import check_source, describe_source
+from src.camera import check_source, describe_source, find_webcam
 from src.config import DEFAULT_CONFIG_PATH, Config, convert_value, load_config, save_config
 
 DISCLAIMER = (
     "Note: this is a demonstration and decision-support tool. It is not 100% accurate and must not\n"
     "be the only way workplace safety is enforced. Always confirm alerts with a person."
 )
+
+DEMO_VIDEO = Path(__file__).resolve().parent / "samples" / "demo.mp4"
 
 
 def print_summary(summary: dict | None) -> None:
@@ -36,14 +39,36 @@ def print_summary(summary: dict | None) -> None:
     print(f"Alerts          : {summary['alerts']}\n")
 
 
-def start(config: Config) -> dict | None:
+def start(config: Config, interactive: bool = False) -> dict | None:
     from src.monitor import run_monitoring
 
     print(f"Checking {describe_source(config.source)}...")
     problem = check_source(config.source)
+    is_webcam = str(config.source).strip().isdigit()
+    if problem and is_webcam:
+        print(f"{problem}\nLooking for another webcam...")
+        found = find_webcam()
+        if found is not None:
+            print(f"Found webcam {found}. Using it for this session "
+                  f"(set source: \"{found}\" in Settings to keep it).")
+            config = replace(config, source=str(found))
+            problem = None
     if problem:
         print(f"\n[error] {problem}")
-        print("Change the input source in Settings (or config.yaml) and try again.\n")
+        if is_webcam:
+            print("No working webcam was found. Plug in a USB webcam, or use a phone/IP camera "
+                  "by setting source to its http:// or rtsp:// address.")
+        if is_webcam and interactive and DEMO_VIDEO.exists():
+            answer = input(f"Use the demo video {DEMO_VIDEO.as_posix()} instead? (Y/n): ").strip().lower()
+            if answer in ("", "y", "yes"):
+                demo_config = replace(config, source=str(DEMO_VIDEO))
+                summary = run_monitoring(demo_config)
+                print_summary(summary)
+                return summary
+        print("Change the input source in Settings (or config.yaml) and try again.")
+        if is_webcam and DEMO_VIDEO.exists():
+            print(f"To try the demo video: python main.py --start --source {DEMO_VIDEO.as_posix()}")
+        print()
         return None
 
     summary = run_monitoring(config)
@@ -143,7 +168,7 @@ def menu(config: Config, config_path: str) -> None:
         choice = input("Choose 1-5: ").strip()
 
         if choice == "1":
-            last_summary = start(config) or last_summary
+            last_summary = start(config, interactive=True) or last_summary
         elif choice == "2":
             from src.monitor import analyze_image
 
