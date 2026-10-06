@@ -1,7 +1,7 @@
 """Safety Helmet Detection - application entry point.
 
 Usage:
-    python main.py                         Menu (Start, Settings, Statistics, Exit)
+    python main.py                         Menu (Start, Choose camera, Settings, Statistics, Exit)
     python main.py --start                 Start monitoring straight away
     python main.py --start --source video.mp4
     python main.py --start --record        Start monitoring and record the view to recordings/
@@ -16,7 +16,7 @@ from collections import Counter
 from dataclasses import fields, replace
 from pathlib import Path
 
-from src.camera import check_source, describe_source, find_webcam
+from src.camera import check_source, describe_source, find_webcam, list_webcams
 from src.config import DEFAULT_CONFIG_PATH, Config, convert_value, load_config, save_config
 
 DISCLAIMER = (
@@ -116,6 +116,74 @@ def settings_menu(config: Config, config_path: str) -> Config:
         print(f"Saved: {name} = {getattr(config, name)}")
 
 
+CAMERA_URL_EXAMPLES = (
+    "  CCTV / IP camera : rtsp://user:password@192.168.1.10:554/stream1\n"
+    "  Phone (IP Webcam): http://192.168.1.20:8080/video\n"
+    "  Phone (DroidCam) : http://192.168.1.20:4747/video"
+)
+
+
+def camera_menu(config: Config, config_path: str) -> Config:
+    """Pick the input: a webcam on this computer, a network camera, or a video file."""
+    print("\n--- Choose camera ---")
+    print(f"Current input: {describe_source(config.source)}")
+    print("1. Webcam on this computer (USB or built-in, also DroidCam on Windows)")
+    print("2. IP / CCTV / phone camera over the network")
+    print("3. Video file")
+    print("0. Back")
+    choice = input("Choose 0-3: ").strip()
+
+    if choice == "1":
+        print("Looking for webcams...")
+        webcams = list_webcams()
+        if not webcams:
+            print("No webcam found on this computer. Plug one in (or start DroidCam) and try again,\n"
+                  "or choose option 2 to use a network camera.")
+            return config
+        if len(webcams) == 1:
+            source = str(webcams[0])
+            print(f"Found webcam {source}.")
+        else:
+            print("Found webcams: " + ", ".join(str(index) for index in webcams))
+            source = input(f"Webcam number [{webcams[0]}]: ").strip() or str(webcams[0])
+            if not source.isdigit() or int(source) not in webcams:
+                print("That webcam was not found.")
+                return config
+    elif choice == "2":
+        print("Enter the camera address. Examples:")
+        print(CAMERA_URL_EXAMPLES)
+        source = input("Address: ").strip().strip('"')
+        if not source:
+            return config
+        if "://" not in source:
+            print("The address must start with rtsp://, http:// or https://.")
+            return config
+    elif choice == "3":
+        source = input("Video file path: ").strip().strip('"')
+        if not source:
+            return config
+    else:
+        return config
+
+    print(f"Testing {describe_source(source)}...")
+    problem = check_source(source)
+    if problem:
+        print(f"[error] {problem}\nThe input was not changed.")
+        if choice == "2":
+            print("Check that the camera is on, on the same network as this computer, and that the\n"
+                  "address, username and password are right. You can open the same address in VLC to test it.")
+        return config
+
+    config.source = source
+    if choice == "2":
+        camera_id = input(f"Camera name for the log [{config.camera_id}]: ").strip()
+        if camera_id:
+            config.camera_id = camera_id
+    save_config(config, config_path)
+    print(f"OK. Input is now {describe_source(source)} (saved to {config_path}).")
+    return config
+
+
 def statistics_menu(config: Config, last_summary: dict | None) -> None:
     from src.event_logger import read_events
 
@@ -162,29 +230,32 @@ def menu(config: Config, config_path: str) -> None:
         print("\n========== Safety Helmet Detection ==========")
         print(f"Input: {describe_source(config.source)}   Model: {config.helmet_model}")
         print("1. Start monitoring")
-        print("2. Analyse an image")
-        print("3. Settings")
-        print("4. Statistics")
-        print("5. Exit")
-        choice = input("Choose 1-5: ").strip()
+        print("2. Choose camera")
+        print("3. Analyse an image")
+        print("4. Settings")
+        print("5. Statistics")
+        print("6. Exit")
+        choice = input("Choose 1-6: ").strip()
 
         if choice == "1":
             last_summary = start(config, interactive=True) or last_summary
         elif choice == "2":
+            config = camera_menu(config, config_path)
+        elif choice == "3":
             from src.monitor import analyze_image
 
             path = input("Image path: ").strip().strip('"')
             if path:
                 analyze_image(config, path)
-        elif choice == "3":
-            config = settings_menu(config, config_path)
         elif choice == "4":
-            statistics_menu(config, last_summary)
+            config = settings_menu(config, config_path)
         elif choice == "5":
+            statistics_menu(config, last_summary)
+        elif choice == "6":
             print("Goodbye.")
             return
         else:
-            print("Please choose 1, 2, 3, 4 or 5.")
+            print("Please choose a number from 1 to 6.")
 
 
 def main() -> int:

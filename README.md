@@ -37,12 +37,24 @@ Built with **Python + OpenCV + YOLO (Ultralytics)**.
 ## 2. Running
 
 ```bash
-python main.py                                  # menu: Start, Analyse image, Settings, Statistics, Exit
+python main.py                                  # menu: Start, Choose camera, Analyse image, Settings, Statistics, Exit
 python main.py --start                          # start monitoring the webcam directly
 python main.py --start --source videos/site.mp4 # test with a video file
 python main.py --start --source "rtsp://user:pass@192.168.1.10:554/stream1"
 python main.py --image photo.jpg                # analyse one image -> photo_result.jpg
 ```
+
+**Choosing a camera** (menu option 2). The camera is tested before it is saved to `config.yaml`.
+
+| Camera | How to connect | Example input |
+|---|---|---|
+| Webcam on this computer (USB or built-in) | Plug it in; the app lists the webcams it finds | `0` |
+| Phone as a webcam (DroidCam app + DroidCam Client on Windows) | Appears as a normal webcam | `0` or `1` |
+| Phone over Wi-Fi ("IP Webcam" app on Android) | Same Wi-Fi as this computer | `http://192.168.1.20:8080/video` |
+| CCTV / IP camera | Same network as this computer; RTSP address is in the camera's manual or web page | `rtsp://user:password@192.168.1.10:554/stream1` |
+| Video file | Any MP4, AVI, MOV or MKV | `videos/site.mp4` |
+
+If an address does not work in the app, open it in VLC (Media > Open Network Stream) to check the address, username and password.
 
 The person model (`yolo11n.pt`) downloads automatically the first time.
 

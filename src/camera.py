@@ -33,12 +33,19 @@ def is_stream_url(source: int | str) -> bool:
     return isinstance(source, str) and "://" in source
 
 
+def stream_host(url: str) -> str:
+    """Host part of a stream URL, without the username and password."""
+    rest = url.split("://", 1)[1]
+    host = rest.split("/", 1)[0]
+    return host.rsplit("@", 1)[-1]
+
+
 def describe_source(source: str | int) -> str:
     parsed = parse_source(source)
     if isinstance(parsed, int):
         return f"webcam {parsed}"
     if is_stream_url(parsed):
-        return "network stream"
+        return f"network camera {stream_host(parsed)}"
     return f"video file {parsed}"
 
 
@@ -66,8 +73,9 @@ def open_stream(url: str) -> cv2.VideoCapture:
     return cv2.VideoCapture(url, cv2.CAP_FFMPEG, params)
 
 
-def find_webcam(max_index: int = 4) -> int | None:
-    """Return the number of the first webcam that delivers a frame, or None."""
+def list_webcams(max_index: int = 4) -> list[int]:
+    """Numbers of the webcams on this computer that deliver a frame."""
+    found = []
     for index in range(max_index + 1):
         capture = open_webcam(index)
         if capture is None:
@@ -75,8 +83,14 @@ def find_webcam(max_index: int = 4) -> int | None:
         ok, frame = capture.read()
         capture.release()
         if ok and frame is not None:
-            return index
-    return None
+            found.append(index)
+    return found
+
+
+def find_webcam(max_index: int = 4) -> int | None:
+    """Return the number of the first webcam that delivers a frame, or None."""
+    found = list_webcams(max_index)
+    return found[0] if found else None
 
 
 class VideoSource:

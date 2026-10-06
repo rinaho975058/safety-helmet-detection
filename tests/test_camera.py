@@ -68,3 +68,17 @@ def test_lost_live_source_raises_after_reconnect_fails(monkeypatch):
 def test_webcam_not_found_message(monkeypatch):
     monkeypatch.setattr(camera, "open_webcam", lambda index: None)
     assert "Cannot open webcam 3" in camera.check_source("3")
+
+
+def test_network_camera_description_hides_password():
+    text = camera.describe_source("rtsp://admin:secret@192.168.1.10:554/stream1")
+    assert text == "network camera 192.168.1.10:554"
+    assert camera.describe_source("http://192.168.1.20:8080/video") == "network camera 192.168.1.20:8080"
+
+
+def test_list_webcams_returns_working_cameras(monkeypatch):
+    working = {1: FakeCapture(frames=1), 3: FakeCapture(frames=1)}
+    for fake in working.values():
+        fake.gate.release()
+    monkeypatch.setattr(camera, "open_webcam", lambda index: working.get(index))
+    assert camera.list_webcams() == [1, 3]
