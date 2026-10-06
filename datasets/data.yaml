@@ -1,0 +1,15 @@
+# YOLO dataset definition for helmet detection.
+# Put images in datasets/images/{train,val,test} and matching YOLO .txt labels in
+# datasets/labels/{train,val,test}. Keep train / val / test images separate (no duplicates
+# or frames from the same video clip across splits) to avoid data leakage.
+
+# No "path:" key on purpose: Ultralytics then resolves the folders below relative to this file
+# (scripts/train.py and scripts/evaluate.py pass its absolute path).
+train: images/train
+val: images/val
+test: images/test
+
+names:
+  0: person
+  1: helmet
+  2: no_helmet

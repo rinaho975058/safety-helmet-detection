@@ -1,0 +1,55 @@
+# Safety Helmet Detection settings.
+# You can edit this file directly or use "Settings" in the app menu.
+
+# ---------- Input ----------
+# "0" = default webcam, "1" = second webcam,
+# a video file path such as "videos/test.mp4",
+# or a CCTV stream such as "rtsp://user:pass@192.168.1.10:554/stream1"
+source: "0"
+camera_id: camera-1          # Name written to the event log
+capture_width: 1280
+capture_height: 720
+reconnect_attempts: 5        # Live sources only
+
+# ---------- Models ----------
+person_model: yolo11n.pt     # General COCO model, downloaded automatically on first run
+helmet_model: models/helmet_model.pt
+device: ""                   # "" = automatic (GPU if available), "cpu", or "0" for the first GPU
+image_size: 640
+
+# Class names produced by the models (case-insensitive) and what they mean.
+person_classes: [person]
+helmet_classes: [helmet, hardhat, hard-hat]
+no_helmet_classes: [no_helmet, no-helmet, no-hardhat, head]
+
+# ---------- Thresholds ----------
+person_confidence: 0.5
+helmet_confidence: 0.45
+no_helmet_confidence: 0.5
+head_region_ratio: 0.35      # Top part of a person box treated as the head area
+association_min_overlap: 0.5 # Share of a helmet box that must lie in the head area
+association_margin: 0.15     # Closer than this between two people -> Unknown (ambiguous)
+derive_no_helmet: false      # true = a clear person with no helmet evidence counts as No Helmet
+
+# ---------- Temporal stability ----------
+smoothing_window: 15         # Frames remembered per person
+status_min_ratio: 0.6        # Share of the window needed to change a person's status
+max_missed_frames: 30        # Frames a person can disappear before the track is dropped
+tracker_iou: 0.3
+
+# ---------- Alerts ----------
+alerts_enabled: true
+alert_sound: true
+alert_stable_frames: 10      # No Helmet must be stable this many frames before an alert
+alert_cooldown_seconds: 10
+
+# ---------- Logging and snapshots ----------
+logging_enabled: true
+log_dir: logs
+log_retention_days: 30
+snapshots_enabled: false     # Saves a frame when a violation alert fires
+snapshot_dir: snapshots
+snapshot_retention_days: 7
+
+# ---------- Display ----------
+display_width: 1280

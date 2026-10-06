@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Large or private files
+*.pt
+!models/.gitkeep
+logs/*
+!logs/.gitkeep
+snapshots/*
+!snapshots/.gitkeep
+runs/
+datasets/images/
+datasets/labels/
