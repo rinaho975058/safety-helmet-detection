@@ -47,6 +47,7 @@ python main.py                                  # menu: Start, Choose camera, An
 python main.py --start                          # start monitoring the webcam directly
 python main.py --start --source videos/site.mp4 # test with a video file
 python main.py --start --source "rtsp://user:pass@192.168.1.10:554/stream1"
+python main.py --start --source screen          # detect on this computer's screen
 python main.py --image photo.jpg                # analyse one image -> photo_result.jpg
 ```
 
@@ -59,6 +60,7 @@ python main.py --image photo.jpg                # analyse one image -> photo_res
 | Phone over Wi-Fi ("IP Webcam" app on Android) | Same Wi-Fi as this computer | `http://192.168.1.20:8080/video` |
 | CCTV / IP camera | Same network as this computer; RTSP address is in the camera's manual or web page | `rtsp://user:password@192.168.1.10:554/stream1` |
 | Video file | Any MP4, AVI, MOV or MKV | `videos/site.mp4` |
+| This computer's screen | Shows whatever is on screen: a CCTV viewer program, a video call, a phone mirrored to the PC. Select only the area with the camera picture (the app's own window must not be inside it) | `screen`, `screen:2`, or an area `screen:100,80,1280,720` |
 
 If an address does not work in the app, open it in VLC (Media > Open Network Stream) to check the address, username and password.
 

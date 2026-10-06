@@ -4,7 +4,8 @@
 # ---------- Input ----------
 # "0" = default webcam, "1" = second webcam,
 # a video file path such as "videos/test.mp4",
-# or a CCTV stream such as "rtsp://user:pass@192.168.1.10:554/stream1"
+# or a CCTV stream such as "rtsp://user:pass@192.168.1.10:554/stream1",
+# or this computer's screen: "screen", "screen:2" (second monitor), "screen:left,top,width,height" (an area)
 source: "0"
 camera_id: camera-1          # Name written to the event log
 capture_width: 1280

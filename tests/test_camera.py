@@ -82,3 +82,14 @@ def test_list_webcams_returns_working_cameras(monkeypatch):
         fake.gate.release()
     monkeypatch.setattr(camera, "open_webcam", lambda index: working.get(index))
     assert camera.list_webcams() == [1, 3]
+
+
+def test_screen_sources_are_parsed():
+    assert camera.parse_screen("screen") == (1, None)
+    assert camera.parse_screen("screen:2") == (2, None)
+    assert camera.parse_screen("screen:100,50,640,480") == (0, (100, 50, 640, 480))
+    assert camera.parse_screen("screen:-1920,0,800,600") == (0, (-1920, 0, 800, 600))
+    with pytest.raises(ValueError):
+        camera.parse_screen("screen:10,10,0,100")
+    assert camera.describe_source("screen:100,50,640,480") == "screen area 640x480 at (100, 50)"
+    assert VideoSource("screen").is_live

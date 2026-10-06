@@ -1,4 +1,4 @@
-"""Input manager: webcam, video file or RTSP/CCTV stream."""
+"""Input manager: webcam, video file, RTSP/CCTV stream or this computer's screen."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp")
 
 STREAM_TIMEOUT_MSEC = 10000
 READ_TIMEOUT_SECONDS = 10.0
+SCREEN_MAX_FPS = 15.0  # Screen grabs are cheap to repeat; no need to use a whole CPU core
 
 
 class SourceError(Exception):
@@ -33,6 +34,26 @@ def is_stream_url(source: int | str) -> bool:
     return isinstance(source, str) and "://" in source
 
 
+def is_screen(source: int | str) -> bool:
+    """'screen', 'screen:2' (monitor 2) or 'screen:left,top,width,height' (an area)."""
+    return isinstance(source, str) and (source.lower() == "screen" or source.lower().startswith("screen:"))
+
+
+def parse_screen(source: str) -> tuple[int, tuple[int, int, int, int] | None]:
+    """Return (monitor number, area or None). Monitor 1 is the main screen."""
+    spec = source.split(":", 1)[1].strip() if ":" in source else ""
+    if not spec:
+        return 1, None
+    parts = [part.strip() for part in spec.split(",")]
+    if len(parts) == 1 and parts[0].isdigit():
+        return int(parts[0]), None
+    if len(parts) == 4 and all(part.lstrip("-").isdigit() for part in parts):
+        left, top, width, height = (int(part) for part in parts)
+        if width > 0 and height > 0:
+            return 0, (left, top, width, height)
+    raise ValueError(f"Invalid screen source '{source}'. Use screen, screen:2 or screen:left,top,width,height.")
+
+
 def stream_host(url: str) -> str:
     """Host part of a stream URL, without the username and password."""
     rest = url.split("://", 1)[1]
@@ -46,6 +67,14 @@ def describe_source(source: str | int) -> str:
         return f"webcam {parsed}"
     if is_stream_url(parsed):
         return f"network camera {stream_host(parsed)}"
+    if is_screen(parsed):
+        try:
+            monitor, area = parse_screen(parsed)
+        except ValueError:
+            return "screen (invalid setting)"
+        if area:
+            return f"screen area {area[2]}x{area[3]} at ({area[0]}, {area[1]})"
+        return "screen" if monitor == 1 else f"screen {monitor}"
     return f"video file {parsed}"
 
 
@@ -87,6 +116,81 @@ def list_webcams(max_index: int = 4) -> list[int]:
     return found
 
 
+def _new_mss():
+    import mss
+
+    return mss.MSS() if hasattr(mss, "MSS") else mss.mss()
+
+
+def list_screens() -> list[dict]:
+    """Monitors of this computer: [{'number', 'left', 'top', 'width', 'height'}], main screen first."""
+    try:
+        with _new_mss() as grabber:
+            monitors = grabber.monitors[1:]
+    except Exception:  # noqa: BLE001 - no display, or mss not installed
+        return []
+    return [{"number": number, **{key: monitor[key] for key in ("left", "top", "width", "height")}}
+            for number, monitor in enumerate(monitors, start=1)]
+
+
+class ScreenCapture:
+    """Grabs the screen like a camera. Has the parts of the cv2.VideoCapture API that VideoSource uses."""
+
+    def __init__(self, source: str, max_fps: float = SCREEN_MAX_FPS):
+        self.monitor_number, self.area = parse_screen(source)
+        self.min_interval = 1.0 / max_fps
+        self.region: dict | None = None
+        self._last = 0.0
+        self._local = threading.local()  # mss handles only work on the thread that made them
+        self._grabbers: list = []
+        try:
+            grabber = self._grabber()
+        except ImportError:
+            return
+        if self.area:
+            left, top, width, height = self.area
+            self.region = {"left": left, "top": top, "width": width, "height": height}
+        elif 1 <= self.monitor_number < len(grabber.monitors):
+            self.region = dict(grabber.monitors[self.monitor_number])
+
+    def _grabber(self):
+        if getattr(self._local, "grabber", None) is None:
+            self._local.grabber = _new_mss()
+            self._grabbers.append(self._local.grabber)
+        return self._local.grabber
+
+    def isOpened(self) -> bool:
+        return self.region is not None
+
+    def read(self) -> tuple[bool, np.ndarray | None]:
+        if self.region is None:
+            return False, None
+        wait = self._last + self.min_interval - time.perf_counter()
+        if wait > 0:
+            time.sleep(wait)
+        self._last = time.perf_counter()
+        try:
+            shot = self._grabber().grab(self.region)
+        except Exception:  # noqa: BLE001 - e.g. screen locked or display changed
+            return False, None
+        return True, np.ascontiguousarray(np.asarray(shot)[:, :, :3])
+
+    def set(self, *args) -> bool:
+        return False
+
+    def get(self, prop: int) -> float:
+        return 1.0 / self.min_interval if prop == cv2.CAP_PROP_FPS else 0.0
+
+    def release(self) -> None:
+        for grabber in self._grabbers:
+            try:
+                grabber.close()
+            except Exception:  # noqa: BLE001
+                pass
+        self._grabbers.clear()
+        self.region = None
+
+
 def find_webcam(max_index: int = 4) -> int | None:
     """Return the number of the first webcam that delivers a frame, or None."""
     found = list_webcams(max_index)
@@ -114,8 +218,8 @@ class VideoSource:
 
     @property
     def is_live(self) -> bool:
-        """Webcams and streams are live; video files are not."""
-        return isinstance(self.source, int) or is_stream_url(self.source)
+        """Webcams, streams and the screen are live; video files are not."""
+        return isinstance(self.source, int) or is_stream_url(self.source) or is_screen(self.source)
 
     @property
     def fps(self) -> float:
@@ -133,6 +237,11 @@ class VideoSource:
             self.capture = open_webcam(self.source)
         elif is_stream_url(self.source):
             self.capture = open_stream(self.source)
+        elif is_screen(self.source):
+            try:
+                self.capture = ScreenCapture(self.source)
+            except ValueError as error:
+                raise SourceError(str(error)) from error
         else:
             self.capture = cv2.VideoCapture(self.source)
 
@@ -144,6 +253,11 @@ class VideoSource:
                 )
             if is_stream_url(self.source):
                 raise SourceError("Cannot connect to the network stream. Check the URL, username and password.")
+            if is_screen(self.source):
+                raise SourceError(
+                    f"Cannot capture {describe_source(self.source)}. Check that the monitor exists "
+                    "and that 'mss' is installed (pip install -r requirements.txt)."
+                )
             raise SourceError(f"Cannot read video file {self.source}. It may be corrupted or in an unsupported format.")
 
         if isinstance(self.source, int):
@@ -151,7 +265,7 @@ class VideoSource:
             self.capture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
             self.capture.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
             self.capture.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
-        if self.is_live:
+        if self.is_live and not is_screen(self.source):
             self.capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
         self.ended = False

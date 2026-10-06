@@ -16,7 +16,7 @@ from collections import Counter
 from dataclasses import fields, replace
 from pathlib import Path
 
-from src.camera import check_source, describe_source, find_webcam, list_webcams
+from src.camera import check_source, describe_source, find_webcam, list_screens, list_webcams
 from src.config import DEFAULT_CONFIG_PATH, Config, convert_value, load_config, save_config
 
 DISCLAIMER = (
@@ -130,8 +130,9 @@ def camera_menu(config: Config, config_path: str) -> Config:
     print("1. Webcam on this computer (USB or built-in, also DroidCam on Windows)")
     print("2. IP / CCTV / phone camera over the network")
     print("3. Video file")
+    print("4. This computer's screen (e.g. a CCTV viewer program, video call or mirrored phone)")
     print("0. Back")
-    choice = input("Choose 0-3: ").strip()
+    choice = input("Choose 0-4: ").strip()
 
     if choice == "1":
         print("Looking for webcams...")
@@ -162,6 +163,10 @@ def camera_menu(config: Config, config_path: str) -> Config:
         source = input("Video file path: ").strip().strip('"')
         if not source:
             return config
+    elif choice == "4":
+        source = choose_screen()
+        if not source:
+            return config
     else:
         return config
 
@@ -182,6 +187,60 @@ def camera_menu(config: Config, config_path: str) -> Config:
     save_config(config, config_path)
     print(f"OK. Input is now {describe_source(source)} (saved to {config_path}).")
     return config
+
+
+def choose_screen() -> str | None:
+    """Ask for a monitor and, optionally, an area of it. Returns a screen source or None."""
+    screens = list_screens()
+    if not screens:
+        print("Cannot capture the screen. Install the requirements (pip install -r requirements.txt).")
+        return None
+
+    for screen in screens:
+        main_text = " (main)" if screen["number"] == 1 else ""
+        print(f"  Screen {screen['number']}: {screen['width']}x{screen['height']}{main_text}")
+    number = 1
+    if len(screens) > 1:
+        text = input("Screen number [1]: ").strip() or "1"
+        if not text.isdigit() or not 1 <= int(text) <= len(screens):
+            print("That screen was not found.")
+            return None
+        number = int(text)
+
+    print("Tip: the monitoring window must not be inside the captured area, or it will film itself.\n"
+          "Select only the part that shows the camera picture, or put the app window on another screen.")
+    if input("Select an area with the mouse? (Y/n): ").strip().lower() in ("n", "no"):
+        return "screen" if number == 1 else f"screen:{number}"
+
+    area = select_screen_area(screens[number - 1])
+    if area is None:
+        print("No area selected.")
+        return None
+    return "screen:" + ",".join(str(value) for value in area)
+
+
+def select_screen_area(screen: dict) -> tuple[int, int, int, int] | None:
+    """Show a screenshot and let the user drag a rectangle. Returns (left, top, width, height)."""
+    import cv2
+
+    from src.camera import ScreenCapture
+
+    capture = ScreenCapture(f"screen:{screen['number']}")
+    ok, shot = capture.read()
+    capture.release()
+    if not ok:
+        return None
+
+    scale = min(1.0, 1280 / shot.shape[1], 720 / shot.shape[0])
+    preview = cv2.resize(shot, None, fx=scale, fy=scale) if scale < 1 else shot
+    print("Drag a rectangle over the camera picture, then press Enter (C to cancel).")
+    title = "Select area - drag, then press Enter"
+    x, y, w, h = cv2.selectROI(title, preview, showCrosshair=False)
+    cv2.destroyWindow(title)
+    if w < 10 or h < 10:
+        return None
+    return (screen["left"] + round(x / scale), screen["top"] + round(y / scale),
+            round(w / scale), round(h / scale))
 
 
 def statistics_menu(config: Config, last_summary: dict | None) -> None:
@@ -261,7 +320,7 @@ def menu(config: Config, config_path: str) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Safety Helmet Detection")
     parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH), help="Settings file (default: config.yaml)")
-    parser.add_argument("--source", help="Webcam number, video file or rtsp:// URL (overrides config)")
+    parser.add_argument("--source", help="Webcam number, video file, rtsp:// URL or 'screen' (overrides config)")
     parser.add_argument("--model", help="Helmet model path (overrides config)")
     parser.add_argument("--start", action="store_true", help="Start monitoring without the menu")
     parser.add_argument("--record", action="store_true", help="Record the monitoring view to MP4 (overrides config)")
