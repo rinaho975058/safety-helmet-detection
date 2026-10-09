@@ -63,6 +63,15 @@ class Config:
     recording_enabled: bool = False
     recording_dir: str = "recordings"
     recording_retention_days: int = 7
+    alert_recording_enabled: bool = True
+    alert_record_pre_seconds: float = 3.0
+    alert_record_post_seconds: float = 5.0
+    alert_record_max_seconds: float = 60.0
+
+    # Web dashboard
+    web_port: int = 8000
+    phone_port: int = 8443
+    saved_cameras: list[str] = field(default_factory=list)
 
     # Display
     display_width: int = 1280
@@ -83,9 +92,15 @@ class Config:
 
         for name in ("max_missed_frames", "reconnect_attempts", "log_retention_days",
                      "snapshot_retention_days", "recording_retention_days", "alert_cooldown_seconds",
-                     "association_margin"):
+                     "association_margin", "alert_record_pre_seconds", "alert_record_post_seconds"):
             if getattr(self, name) < 0:
                 problems.append(f"{name} cannot be negative.")
+
+        for name in ("web_port", "phone_port"):
+            if not 1 <= getattr(self, name) <= 65535:
+                problems.append(f"{name} must be between 1 and 65535.")
+        if self.alert_record_max_seconds < 1:
+            problems.append("alert_record_max_seconds must be at least 1.")
 
         return problems
 

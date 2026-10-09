@@ -155,3 +155,107 @@ def render(frame: np.ndarray, overlay: Overlay, display_width: int = 1280) -> np
         cv2.rectangle(image, (0, 0), (width - 1, height - 1), RED, 8)
 
     return image
+
+
+# ---------- Dashboard style: head box + rounded label, as in the web dashboard ----------
+
+PILL_TEXT = {Status.HELMET: "Helmet Detected", Status.NO_HELMET: "No Helmet", Status.UNKNOWN: "Checking..."}
+PILL_RGB = {Status.HELMET: (22, 163, 74), Status.NO_HELMET: (220, 38, 38), Status.UNKNOWN: (217, 119, 6)}
+_FONT_CACHE: dict = {}
+
+
+def _font(size: int, bold: bool = True):
+    from PIL import ImageFont
+
+    key = (size, bold)
+    if key not in _FONT_CACHE:
+        names = (["segoeuib.ttf", "arialbd.ttf", "DejaVuSans-Bold.ttf"] if bold
+                 else ["segoeui.ttf", "arial.ttf", "DejaVuSans.ttf"])
+        font = None
+        for name in names:
+            try:
+                font = ImageFont.truetype(name, size)
+                break
+            except OSError:
+                continue
+        _FONT_CACHE[key] = font or ImageFont.load_default()
+    return _FONT_CACHE[key]
+
+
+def head_area(person: PersonView, head_ratio: float = 0.35) -> Box:
+    """The box drawn around a person's head: the helmet/head detection, or the top of the person."""
+    if person.head_box is not None:
+        x1, y1, x2, y2 = person.head_box
+        pad_x, pad_y = (x2 - x1) * 0.25, (y2 - y1) * 0.2
+        return (x1 - pad_x, y1 - pad_y, x2 + pad_x, y2 + pad_y * 3)
+    x1, y1, x2, y2 = person.box
+    return (x1, y1, x2, y1 + (y2 - y1) * head_ratio)
+
+
+def render_dashboard(frame: np.ndarray, people: list[PersonView], max_width: int = 1280,
+                     stamp: str = "") -> tuple[np.ndarray, float]:
+    """Draw the dashboard style labels. Returns (image, scale used from frame to image)."""
+    from PIL import Image, ImageDraw
+
+    image, scale = resize_for_display(frame, min(max_width, frame.shape[1]))
+    height, width = image.shape[:2]
+    line = max(2, round(height / 240))
+    max_font = max(13, round(height / 32))
+
+    canvas = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+    draw = ImageDraw.Draw(canvas)
+
+    for person in people:
+        colour = PILL_RGB[person.status]
+        x1, y1, x2, y2 = (value * scale for value in head_area(person))
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(width - 1, x2), min(height - 1, y2)
+        draw.rectangle((x1, y1, x2, y2), outline=colour, width=line)
+
+        # Rounded label centred under the box, with a white circle icon. Sized to the person, so
+        # labels of small (distant) people stay small; very small people get the icon only.
+        person_width = (person.box[2] - person.box[0]) * scale
+        font_size = int(min(max_font, max(11, person_width * 0.11)))
+        font = _font(font_size)
+        text = PILL_TEXT[person.status]
+        pill_h = round(font_size * 1.9)
+        icon = round(pill_h * 0.62)
+        pad = round(pill_h * 0.3)
+        if person_width < font_size * 6:
+            text = ""
+            pill_w = pad * 2 + icon
+        else:
+            pill_w = pad + icon + pad * 0.8 + draw.textlength(text, font=font) + pad * 1.3
+        cx = (x1 + x2) / 2
+        px1 = min(max(0, cx - pill_w / 2), width - pill_w)
+        py1 = min(y2 - pill_h * 0.35, height - pill_h)
+        draw.rounded_rectangle((px1, py1, px1 + pill_w, py1 + pill_h), radius=pill_h // 2, fill=colour)
+
+        ix1, iy1 = px1 + pad, py1 + (pill_h - icon) / 2
+        draw.ellipse((ix1, iy1, ix1 + icon, iy1 + icon), fill=(255, 255, 255))
+        mid_x, mid_y = ix1 + icon / 2, iy1 + icon / 2
+        mark = max(2, round(icon / 7))
+        if person.status == Status.HELMET:
+            draw.line([(ix1 + icon * 0.27, mid_y), (ix1 + icon * 0.44, iy1 + icon * 0.68),
+                       (ix1 + icon * 0.74, iy1 + icon * 0.33)], fill=colour, width=mark, joint="curve")
+        elif person.status == Status.NO_HELMET:
+            draw.line([(mid_x, iy1 + icon * 0.22), (mid_x, iy1 + icon * 0.58)], fill=colour, width=mark)
+            draw.ellipse((mid_x - mark * 0.6, iy1 + icon * 0.7, mid_x + mark * 0.6, iy1 + icon * 0.7 + mark * 1.2),
+                         fill=colour)
+        else:
+            draw.text((mid_x, mid_y), "?", font=_font(round(icon * 0.75)), fill=colour, anchor="mm")
+
+        if text:
+            draw.text((ix1 + icon + pad * 0.8, py1 + pill_h / 2), text, font=font,
+                      fill=(255, 255, 255), anchor="lm")
+
+    if stamp:
+        small = _font(max(11, round(height / 50)), bold=False)
+        text_width = draw.textlength(stamp, font=small)
+        box_h = round(small.size * 1.7)
+        bx1 = width - text_width - box_h
+        draw.rounded_rectangle((bx1 - 8, 10, width - 10, 10 + box_h), radius=6, fill=(15, 23, 42))
+        draw.text((bx1 + (text_width + box_h - 8) / 2 - 4, 10 + box_h / 2), stamp, font=small,
+                  fill=(255, 255, 255), anchor="mm")
+
+    return cv2.cvtColor(np.asarray(canvas), cv2.COLOR_RGB2BGR), scale

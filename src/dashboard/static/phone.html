@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Phone Camera</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22%3E%3Cpath d=%22M3 17h18v2H3zM5 16a7 7 0 0 1 14 0z%22 fill=%22%23f59e0b%22/%3E%3C/svg%3E">
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body { background: #0f172a; color: #e2e8f0; font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+           display: flex; flex-direction: column; padding: 14px 16px calc(16px + env(safe-area-inset-bottom)); gap: 12px; }
+    h1 { margin: 0; font-size: 19px; color: #fff; }
+    .frame { flex: 1; min-height: 0; background: #000; border-radius: 14px; overflow: hidden; position: relative; display: grid; place-items: center; }
+    video { width: 100%; height: 100%; object-fit: contain; }
+    .badge { position: absolute; top: 10px; left: 10px; background: rgba(15, 23, 42, .8); padding: 4px 10px; border-radius: 8px;
+             font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+    .badge i { width: 9px; height: 9px; border-radius: 50%; background: #94a3b8; }
+    .badge.on i { background: #ef4444; }
+    .hint { color: #94a3b8; text-align: center; padding: 20px; margin: 0; }
+    .row { display: flex; gap: 10px; }
+    button { flex: 1; height: 50px; border-radius: 12px; border: 0; font: inherit; font-weight: 700; cursor: pointer; }
+    #start { background: #2563eb; color: #fff; }
+    #start.stop { background: #dc2626; }
+    #flip { flex: 0 0 110px; background: #1e293b; color: #e2e8f0; }
+    #status { margin: 0; text-align: center; font-size: 14px; color: #94a3b8; min-height: 21px; }
+    #status.ok { color: #4ade80; }
+    #status.bad { color: #fca5a5; }
+  </style>
+</head>
+<body>
+  <h1>Safety Helmet Detection - phone camera</h1>
+  <div class="frame">
+    <video id="video" playsinline muted></video>
+    <p class="hint" id="hint">Tap <b>Start camera</b>. The picture is sent to the computer on your Wi-Fi only.</p>
+    <span class="badge" id="badge"><i></i><span>OFF</span></span>
+  </div>
+  <p id="status"></p>
+  <div class="row">
+    <button id="flip" type="button">Flip camera</button>
+    <button id="start" type="button">Start camera</button>
+  </div>
+  <canvas id="canvas" hidden></canvas>
+
+  <script>
+    "use strict";
+    const key = new URLSearchParams(location.search).get("k") || "";
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("canvas");
+    const startButton = document.getElementById("start");
+    const statusText = document.getElementById("status");
+    const badge = document.getElementById("badge");
+    const MAX_WIDTH = 960;
+    const FRAME_INTERVAL = 100;   // ms, about 10 pictures per second at most
+
+    let stream = null;
+    let facing = "environment";
+    let sending = false;
+    let sent = 0;
+    let wakeLock = null;
+
+    function setStatus(text, kind = "") {
+      statusText.textContent = text;
+      statusText.className = kind;
+    }
+
+    async function start() {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setStatus("This browser cannot use the camera here. Open the page in Chrome or Safari.", "bad");
+        return;
+      }
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false,
+        });
+      } catch (error) {
+        setStatus("Camera not allowed: " + error.message + ". Allow camera access and try again.", "bad");
+        return;
+      }
+      video.srcObject = stream;
+      await video.play();
+      document.getElementById("hint").hidden = true;
+      startButton.textContent = "Stop";
+      startButton.classList.add("stop");
+      badge.classList.add("on");
+      badge.lastElementChild.textContent = "LIVE";
+      try { wakeLock = await navigator.wakeLock?.request("screen"); } catch (e) { /* optional */ }
+      sending = true;
+      sendLoop();
+    }
+
+    function stop() {
+      sending = false;
+      stream?.getTracks().forEach((track) => track.stop());
+      stream = null;
+      video.srcObject = null;
+      wakeLock?.release?.();
+      startButton.textContent = "Start camera";
+      startButton.classList.remove("stop");
+      badge.classList.remove("on");
+      badge.lastElementChild.textContent = "OFF";
+      setStatus("Stopped.");
+    }
+
+    async function sendLoop() {
+      while (sending) {
+        const began = performance.now();
+        if (video.videoWidth) {
+          const scale = Math.min(1, MAX_WIDTH / video.videoWidth);
+          canvas.width = Math.round(video.videoWidth * scale);
+          canvas.height = Math.round(video.videoHeight * scale);
+          canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+          const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.75));
+          try {
+            const response = await fetch("/phone/frame?k=" + encodeURIComponent(key), { method: "POST", body: blob });
+            if (!response.ok) throw new Error(response.status === 403 ? "this link is old, scan the QR code again" : "HTTP " + response.status);
+            const data = await response.json();
+            sent += 1;
+            setStatus(data.monitoring ? `Sending to the computer ✓ (${sent} pictures)`
+              : "Connected ✓ - choose \"Phone camera\" on the computer to start monitoring.", "ok");
+          } catch (error) {
+            setStatus("Cannot reach the computer: " + error.message, "bad");
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+          }
+        }
+        const wait = FRAME_INTERVAL - (performance.now() - began);
+        if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+      }
+    }
+
+    startButton.addEventListener("click", () => (stream ? stop() : start()));
+    document.getElementById("flip").addEventListener("click", async () => {
+      facing = facing === "environment" ? "user" : "environment";
+      if (stream) { stop(); await start(); }
+    });
+    document.addEventListener("visibilitychange", async () => {
+      if (document.visibilityState === "visible" && stream && wakeLock?.released) {
+        try { wakeLock = await navigator.wakeLock.request("screen"); } catch (e) { /* optional */ }
+      }
+    });
+  </script>
+</body>
+</html>

@@ -39,6 +39,11 @@ def is_screen(source: int | str) -> bool:
     return isinstance(source, str) and (source.lower() == "screen" or source.lower().startswith("screen:"))
 
 
+def is_phone(source: int | str) -> bool:
+    """'phone' = a phone (or any device) sending its camera from the browser page of the dashboard."""
+    return isinstance(source, str) and source.strip().lower() == "phone"
+
+
 def parse_screen(source: str) -> tuple[int, tuple[int, int, int, int] | None]:
     """Return (monitor number, area or None). Monitor 1 is the main screen."""
     spec = source.split(":", 1)[1].strip() if ":" in source else ""
@@ -67,6 +72,8 @@ def describe_source(source: str | int) -> str:
         return f"webcam {parsed}"
     if is_stream_url(parsed):
         return f"network camera {stream_host(parsed)}"
+    if is_phone(parsed):
+        return "phone camera (browser)"
     if is_screen(parsed):
         try:
             monitor, area = parse_screen(parsed)
@@ -81,7 +88,7 @@ def describe_source(source: str | int) -> str:
 def webcam_backends() -> list[int]:
     """Capture backends to try for webcams, best first for this platform."""
     if sys.platform == "win32":
-        return [cv2.CAP_DSHOW, cv2.CAP_MSMF, cv2.CAP_ANY]
+        return [cv2.CAP_DSHOW, cv2.CAP_MSMF]
     return [cv2.CAP_ANY]
 
 
@@ -131,6 +138,42 @@ def list_screens() -> list[dict]:
         return []
     return [{"number": number, **{key: monitor[key] for key in ("left", "top", "width", "height")}}
             for number, monitor in enumerate(monitors, start=1)]
+
+
+class BrowserFeed:
+    """Latest camera picture sent by a browser (phone page of the dashboard)."""
+
+    def __init__(self):
+        self._condition = threading.Condition()
+        self._frame: np.ndarray | None = None
+        self._count = 0
+        self.last_time = 0.0
+        self.sender = ""
+
+    def push_jpeg(self, data: bytes, sender: str = "") -> bool:
+        frame = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
+        if frame is None:
+            return False
+        with self._condition:
+            self._frame = frame
+            self._count += 1
+            self.last_time = time.time()
+            self.sender = sender
+            self._condition.notify_all()
+        return True
+
+    def wait_frame(self, after: int, timeout: float) -> tuple[int, np.ndarray | None]:
+        """Wait for a frame newer than number `after`. Returns (number, frame or None on timeout)."""
+        with self._condition:
+            if self._count <= after:
+                self._condition.wait(timeout)
+            if self._count <= after:
+                return after, None
+            return self._count, self._frame
+
+    @property
+    def connected(self) -> bool:
+        return time.time() - self.last_time < 3.0
 
 
 class ScreenCapture:

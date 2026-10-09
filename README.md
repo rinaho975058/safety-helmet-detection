@@ -42,6 +42,27 @@ Built with **Python + OpenCV + YOLO (Ultralytics)**.
 
 ## 2. Running
 
+### Web dashboard (recommended)
+
+```bash
+python main.py --web        # opens http://localhost:8000 in your browser
+```
+
+- **Live Camera:** the picture with a green **Helmet Detected** or red **No Helmet** label on each person. Use the camera list (top right) to choose:
+  - the laptop / USB camera
+  - **Phone camera:** scan the QR code with the phone. Nothing to install, the phone's browser sends its camera.
+  - an IP / CCTV camera (**+ Add camera**)
+  - this computer's screen
+  - the demo video
+- **Detection Result:** every person seen, with a photo, their status and the time. Click a person for details.
+- **Alerts:** when someone has no helmet, an alert card appears and the computer beeps. **View Details** shows the picture and the video clip, and **Dismiss** closes the alert.
+- **Automatic alert recording:** every alert saves a clip to `recordings/alert_*.mp4`. The clip starts `alert_record_pre_seconds` before the alert and stops `alert_record_post_seconds` after the last person without a helmet.
+- **Buttons under the video:** ● start/stop recording, 📷 save a photo, ■ stop/start, ⛶ full screen.
+
+The dashboard only opens on this computer. The phone page runs on `https://<this computer>:8443`. It uses a certificate this computer makes for itself, so the phone shows a warning: tap **Advanced → Proceed**. If the phone cannot connect, allow Python in the Windows firewall and use a private Wi-Fi network.
+
+### Terminal version
+
 ```bash
 python main.py                                  # menu: Start, Choose camera, Analyse image, Settings, Statistics, Exit
 python main.py --start                          # start monitoring the webcam directly
@@ -190,7 +211,7 @@ The tests that need a camera, the real model and real scenes (lighting, distance
 ├── config.yaml              Settings
 ├── requirements.txt
 ├── src/
-│   ├── camera.py            Input manager (webcam / video / RTSP, reconnect)
+│   ├── camera.py            Input manager (webcam / video / RTSP / screen / phone, reconnect)
 │   ├── detector.py          YOLO detection engine and class mapping
 │   ├── tracker.py           IoU person tracker
 │   ├── association.py       Person-helmet association
@@ -200,14 +221,17 @@ The tests that need a camera, the real model and real scenes (lighting, distance
 │   ├── event_logger.py      CSV event log and snapshots
 │   ├── renderer.py          Drawing the overlay
 │   ├── pipeline.py          Per-frame pipeline
-│   ├── monitor.py           Live loop and image analysis
+│   ├── monitor.py           Live loop (terminal version) and image analysis
+│   ├── engine.py            Monitoring engine behind the web dashboard
+│   ├── recorder.py          Video recording and automatic alert clips
+│   ├── dashboard/           Web dashboard: server.py + static/ (page, phone page)
 │   ├── config.py            Configuration manager
 │   └── utils.py             Geometry and file helpers
 ├── scripts/                 download_model.py, train.py, evaluate.py
 ├── models/                  helmet_model.pt (not in git)
 ├── datasets/                data.yaml and dataset README
 ├── tests/                   Automated tests
-├── logs/  snapshots/        Created at runtime
+├── logs/  snapshots/  recordings/   Created at runtime
 └── docs/                    Test plan, evaluation report
 ```
 

@@ -5,6 +5,7 @@ Usage:
     python main.py --start                 Start monitoring straight away
     python main.py --start --source video.mp4
     python main.py --start --record        Start monitoring and record the view to recordings/
+    python main.py --web                   Web dashboard in the browser (laptop, phone, CCTV cameras)
     python main.py --image photo.jpg       Analyse a single image
 """
 
@@ -293,8 +294,9 @@ def menu(config: Config, config_path: str) -> None:
         print("3. Analyse an image")
         print("4. Settings")
         print("5. Statistics")
-        print("6. Exit")
-        choice = input("Choose 1-6: ").strip()
+        print("6. Open web dashboard (browser)")
+        print("7. Exit")
+        choice = input("Choose 1-7: ").strip()
 
         if choice == "1":
             last_summary = start(config, interactive=True) or last_summary
@@ -311,10 +313,17 @@ def menu(config: Config, config_path: str) -> None:
         elif choice == "5":
             statistics_menu(config, last_summary)
         elif choice == "6":
+            from src.dashboard.server import run_dashboard
+
+            try:
+                run_dashboard(config, config_path)
+            except KeyboardInterrupt:
+                print("\nDashboard stopped.")
+        elif choice == "7":
             print("Goodbye.")
             return
         else:
-            print("Please choose a number from 1 to 6.")
+            print("Please choose a number from 1 to 7.")
 
 
 def main() -> int:
@@ -324,6 +333,8 @@ def main() -> int:
     parser.add_argument("--model", help="Helmet model path (overrides config)")
     parser.add_argument("--start", action="store_true", help="Start monitoring without the menu")
     parser.add_argument("--record", action="store_true", help="Record the monitoring view to MP4 (overrides config)")
+    parser.add_argument("--web", action="store_true", help="Open the web dashboard in the browser")
+    parser.add_argument("--no-browser", action="store_true", help="With --web: do not open the browser")
     parser.add_argument("--image", help="Analyse one image and save the result")
     parser.add_argument("--output", help="Where to save the analysed image")
     parser.add_argument("--no-show", action="store_true", help="With --image: save the result without opening a window")
@@ -348,6 +359,11 @@ def main() -> int:
         if args.image:
             from src.monitor import analyze_image
             return 0 if analyze_image(config, args.image, args.output, show=not args.no_show) else 1
+        if args.web:
+            from src.dashboard.server import run_dashboard
+
+            run_dashboard(config, args.config, open_browser=not args.no_browser)
+            return 0
         if args.start:
             return 0 if start(config) else 1
         menu(config, args.config)

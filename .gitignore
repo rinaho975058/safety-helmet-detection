@@ -11,6 +11,7 @@ logs/*
 snapshots/*
 !snapshots/.gitkeep
 recordings/
+.certs/
 runs/
 datasets/images/
 datasets/labels/
